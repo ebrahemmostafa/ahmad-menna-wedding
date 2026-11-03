@@ -18,14 +18,38 @@
       method: "POST",
       headers: { apikey: cfg.key, "Content-Type": "application/json" },
       body: JSON.stringify({ passcode: code }),
-    }).then(function (res) {
-      if (res.ok) return res.json();
-      return res.json().then(function (err) {
-        var e = new Error(err.message || "HTTP " + res.status);
-        e.badPasscode = err.code === "28P01";
-        throw e;
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (out) {
+        if (out && out.error) {
+          var e = new Error(out.error);
+          e.reason = out.error;
+          throw e;
+        }
+        return (out.rows || []).map(clean);
       });
-    });
+  }
+
+  // Guests' input is untrusted: keep only well-formed companions and plain strings.
+  function clean(r) {
+    var companions = Array.isArray(r.companions) ? r.companions : [];
+    return {
+      created_at: r.created_at,
+      attending: r.attending === true,
+      full_name: String(r.full_name || ""),
+      companions: companions
+        .filter(function (c) {
+          return c && typeof c === "object" && typeof c.name === "string";
+        })
+        .map(function (c) {
+          return { name: c.name, type: c.type === "child" ? "child" : "adult" };
+        }),
+      song: r.song == null ? null : String(r.song),
+      message: r.message == null ? null : String(r.message),
+    };
   }
 
   function el(tag, cls, text) {
@@ -122,13 +146,20 @@
         try {
           sessionStorage.removeItem(KEY);
         } catch (err) {}
-        gateError.textContent = e.badPasscode ? "Wrong passcode." : "Couldn't connect. Please try again.";
+        gateError.textContent =
+          e.reason === "invalid_passcode"
+            ? "Wrong passcode."
+            : e.reason === "locked"
+            ? "Too many wrong tries. Please wait 15 minutes."
+            : "Couldn't connect. Please try again.";
       });
   }
 
+  // Always quote, and neutralise cells Excel would treat as formulas (=, +, -, @, tab, CR).
   function csvCell(v) {
     v = v == null ? "" : String(v);
-    return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;
+    return '"' + v.replace(/"/g, '""') + '"';
   }
 
   document.getElementById("csv").addEventListener("click", function () {

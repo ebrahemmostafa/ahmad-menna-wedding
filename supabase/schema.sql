@@ -1,7 +1,8 @@
 -- RSVP storage for the Ahmad & Menna invitation (Supabase project: ahmad-menna-wedding).
 -- Guests (anon key) may only INSERT. Nobody can SELECT through the API;
--- responses are read only through get_rsvps(), which checks the passcode in the database
--- and locks out everyone for 15 minutes after 10 wrong passcodes.
+-- responses are read only through get_rsvps(), which checks the passcode in the database.
+-- Wrong passcodes are throttled per client address (10 per 15 minutes) with a global cap
+-- (50 per 15 minutes) against distributed guessing. Checks are serialized with an advisory lock.
 -- Replace __PASSCODE__ with the real passcode before running. Do not commit the real value.
 
 -- Every companion must be {"type": "adult"|"child", "name": "<1-120 chars>"}; at most 20.
@@ -52,6 +53,8 @@ revoke all on schema private from public, anon, authenticated;
 create table if not exists private.passcode_failures (
   at timestamptz not null default now()
 );
+alter table private.passcode_failures add column if not exists client text not null default 'unknown';
+create index if not exists passcode_failures_at_idx on private.passcode_failures (at);
 
 drop function if exists public.get_rsvps(text);
 create function public.get_rsvps(passcode text)
@@ -61,15 +64,28 @@ security definer
 set search_path = public, private
 as $$
 declare
-  recent int;
+  headers json := coalesce(nullif(current_setting('request.headers', true), ''), '{}')::json;
+  v_client text := coalesce(
+    nullif(headers->>'cf-connecting-ip', ''),
+    nullif(btrim(split_part(headers->>'x-forwarded-for', ',', 1)), ''),
+    'unknown'
+  );
+  from_client int;
+  overall int;
 begin
-  select count(*) into recent from private.passcode_failures where at > now() - interval '15 minutes';
-  if recent >= 10 then
+  -- One check at a time, so a burst of parallel requests can't all slip under the limit.
+  perform pg_advisory_xact_lock(hashtext('public.get_rsvps'));
+
+  select count(*) filter (where c.client = v_client), count(*)
+    into from_client, overall
+    from private.passcode_failures c
+   where c.at > now() - interval '15 minutes';
+  if from_client >= 10 or overall >= 50 then
     return jsonb_build_object('error', 'locked');
   end if;
 
   if passcode is distinct from '__PASSCODE__' then
-    insert into private.passcode_failures default values;
+    insert into private.passcode_failures (client) values (v_client);
     delete from private.passcode_failures where at < now() - interval '1 day';
     return jsonb_build_object('error', 'invalid_passcode');
   end if;

@@ -3,6 +3,7 @@
 -- responses are read only through get_rsvps(), which checks the passcode in the database.
 -- Wrong passcodes are throttled per client address (10 per 15 minutes) with a global cap
 -- (50 per 15 minutes) against distributed guessing. Checks are serialized with an advisory lock.
+-- The global cap is looser than a single lockout on purpose, so one guesser can't lock the owners out.
 -- Replace __PASSCODE__ with the real passcode before running. Do not commit the real value.
 
 -- Every companion must be {"type": "adult"|"child", "name": "<1-120 chars>"}; at most 20.
@@ -65,11 +66,9 @@ set search_path = public, private
 as $$
 declare
   headers json := coalesce(nullif(current_setting('request.headers', true), ''), '{}')::json;
-  v_client text := coalesce(
-    nullif(headers->>'cf-connecting-ip', ''),
-    nullif(btrim(split_part(headers->>'x-forwarded-for', ',', 1)), ''),
-    'unknown'
-  );
+  -- Supabase sits behind Cloudflare, which sets this header and rejects client-supplied copies.
+  -- X-Forwarded-For is deliberately not used: its left-most value is client-controlled.
+  v_client text := left(coalesce(nullif(headers->>'cf-connecting-ip', ''), 'unknown'), 64);
   from_client int;
   overall int;
 begin

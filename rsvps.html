@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex, nofollow"/>
+<title>RSVPs &middot; Ahmad &amp; Menna</title>
+<link rel="stylesheet" href="assets/styles-CB5R1myc.css"/>
+<link rel="stylesheet" href="envelope/rsvps.css?v=4"/>
+</head>
+<body>
+<div class="relative mx-auto min-h-screen w-full max-w-[480px] bg-background px-6 pb-16 pt-12">
+  <header class="text-center">
+    <p class="eyebrow">Ahmad &amp; Menna</p>
+    <h1 class="section-script mt-2 text-5xl">RSVPs</h1>
+  </header>
+
+  <form id="gate" class="gate" autocomplete="off">
+    <label for="passcode" class="block mb-2 text-sm text-foreground">Passcode</label>
+    <input id="passcode" inputmode="numeric" maxlength="20" class="w-full rounded-md border border-input bg-card/60 px-4 py-3 text-base text-foreground outline-none transition focus:border-olive" placeholder="Enter passcode"/>
+    <button type="submit" class="mt-4 flex w-full items-center justify-center rounded-md bg-olive py-3.5 text-base font-medium text-olive-foreground shadow-sm transition hover:opacity-90">View responses</button>
+    <p id="gate-error" class="gate__error" role="alert"></p>
+  </form>
+
+  <section id="board" hidden>
+    <div class="stats">
+      <div><span id="stat-responses">0</span><small>Responses</small></div>
+      <div><span id="stat-yes">0</span><small>Attending</small></div>
+      <div><span id="stat-no">0</span><small>Declined</small></div>
+      <div><span id="stat-guests">0</span><small>Total guests</small></div>
+    </div>
+    <div class="toolbar">
+      <input id="search" class="w-full rounded-md border border-input bg-card/60 px-4 py-2.5 text-base text-foreground outline-none focus:border-olive" placeholder="Search by name"/>
+      <button id="refresh" type="button" class="tool-btn">Refresh</button>
+      <button id="csv" type="button" class="tool-btn">CSV</button>
+    </div>
+    <p id="board-status" class="board-status"></p>
+    <div id="list" class="list"></div>
+  </section>
+</div>
+<script src="envelope/supabase-config.js?v=4"></script>
+<script src="envelope/rsvps.js?v=4"></script>
+</body>
+</html>
